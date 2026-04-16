@@ -6,10 +6,11 @@ from pathlib import Path
 from lib.gemini_video import (
     CLIP_ANALYSIS_SCHEMA,
     DEFAULT_GEMINI_MODEL,
-    GEMINI_CLIP_ANALYSIS_PROMPT,
     build_clips_manifest_from_gemini,
+    build_clip_prompt_from_boundaries,
     env_flag,
     extract_response_text,
+    fit_mock_response_to_boundaries,
     get_gemini_client,
     get_mock_response_path,
     parse_clip_analysis_json,
@@ -23,7 +24,7 @@ def analyze_video_with_gemini(
     run_id: str,
     *,
     model: str = DEFAULT_GEMINI_MODEL,
-    prompt_text: str = GEMINI_CLIP_ANALYSIS_PROMPT,
+    prompt_text: str | None = None,
     poll_interval_seconds: float = 5.0,
     keep_remote_file: bool = False,
     use_mock: bool | None = None,
@@ -38,6 +39,13 @@ def analyze_video_with_gemini(
     if not input_path.is_file():
         raise FileNotFoundError(f"Ingested video not found: {input_path}")
 
+    existing_clips_manifest = load_clips_manifest(run_id)
+    existing_clips = existing_clips_manifest.get("clips", [])
+    if not existing_clips:
+        raise ValueError("No local clip boundaries found. Run the script boundary detection step first.")
+
+    resolved_prompt_text = prompt_text or build_clip_prompt_from_boundaries(existing_clips_manifest)
+
     resolved_use_mock = env_flag("GEMINI_USE_MOCK", default=False) if use_mock is None else use_mock
     remote_file_name: str | None = None
 
@@ -46,7 +54,10 @@ def analyze_video_with_gemini(
         if not mock_path.is_file():
             raise FileNotFoundError(f"Mock Gemini response file not found: {mock_path}")
         response_text = mock_path.read_text(encoding="utf-8")
-        gemini_json = parse_clip_analysis_json(response_text)
+        gemini_json = fit_mock_response_to_boundaries(
+            parse_clip_analysis_json(response_text),
+            existing_clips_manifest,
+        )
         model_name = f"{model} (mock)"
     else:
         client = get_gemini_client()
@@ -55,7 +66,7 @@ def analyze_video_with_gemini(
 
         response = client.models.generate_content(
             model=model,
-            contents=[uploaded, prompt_text],
+            contents=[uploaded, resolved_prompt_text],
             config={
                 "response_mime_type": "application/json",
                 "response_json_schema": CLIP_ANALYSIS_SCHEMA,
@@ -66,17 +77,16 @@ def analyze_video_with_gemini(
         remote_file_name = uploaded.name
         model_name = model
 
-    existing_clips_manifest = load_clips_manifest(run_id)
     clips_manifest = build_clips_manifest_from_gemini(
         run_id,
-        existing_clips_manifest.get("created_at"),
+        existing_clips_manifest,
         gemini_json,
         model=model_name,
     )
     save_clips_manifest(run_id, clips_manifest)
     save_gemini_artifacts(
         get_run_dir(run_id),
-        prompt_text=prompt_text,
+        prompt_text=resolved_prompt_text,
         raw_response_text=response_text,
         normalized_response=gemini_json,
     )
@@ -135,7 +145,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    prompt_text = GEMINI_CLIP_ANALYSIS_PROMPT
+    prompt_text = None
     if args.prompt_file:
         prompt_text = Path(args.prompt_file).read_text(encoding="utf-8")
 

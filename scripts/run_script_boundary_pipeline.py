@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--min-scene-length",
         type=float,
-        default=1.0,
+        default=0.75,
         help="Minimum number of seconds between detected clip starts.",
     )
     parser.add_argument(

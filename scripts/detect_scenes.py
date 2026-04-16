@@ -4,10 +4,10 @@ import argparse
 from pathlib import Path
 
 from lib.pipeline import load_clips_manifest, load_run_manifest, save_clips_manifest, save_run_manifest
-from lib.scene_detection import detect_scene_boundaries
+from lib.scene_detection import detect_scene_boundaries, prune_trailing_low_motion_clip, sample_center_frame_change_scores
 
 
-def detect_scenes(run_id: str, threshold: float = 0.35, min_scene_length: float = 1.0) -> int:
+def detect_scenes(run_id: str, threshold: float = 0.35, min_scene_length: float = 0.75) -> int:
     run_manifest = load_run_manifest(run_id)
     input_video = run_manifest.get("input_video")
     if not input_video:
@@ -18,6 +18,10 @@ def detect_scenes(run_id: str, threshold: float = 0.35, min_scene_length: float 
         threshold=threshold,
         min_scene_length=min_scene_length,
     )
+    motion_scores = sample_center_frame_change_scores(Path(input_video))
+    pruned_boundaries = prune_trailing_low_motion_clip(boundaries, duration, motion_scores)
+    trailing_clip_pruned = len(pruned_boundaries) < len(boundaries)
+    boundaries = pruned_boundaries
 
     clips = []
     for index, start_time in enumerate(boundaries, start=1):
@@ -51,6 +55,7 @@ def detect_scenes(run_id: str, threshold: float = 0.35, min_scene_length: float 
             "threshold": threshold,
             "min_scene_length": min_scene_length,
             "video_duration_seconds": round(duration, 3),
+            "trailing_low_motion_clip_pruned": trailing_clip_pruned,
         },
         "clips": clips,
     }
@@ -77,7 +82,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--min-scene-length",
         type=float,
-        default=1.0,
+        default=0.75,
         help="Minimum number of seconds between scene cuts.",
     )
     return parser.parse_args()

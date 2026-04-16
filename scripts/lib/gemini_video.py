@@ -11,20 +11,17 @@ from .common import ROOT_DIR, save_json, timestamp_utc
 
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 
-GEMINI_CLIP_ANALYSIS_PROMPT = """You are analyzing a video for automated clip-by-clip recreation.
+GEMINI_CLIP_ANALYSIS_PROMPT_TEMPLATE = """You are analyzing a video for automated clip-by-clip recreation.
 
-Split the video into meaningful clips based on shot changes, scene cuts, major camera changes, or major action changes. Do not split minor motion inside the same shot.
+The clip boundaries have already been determined locally by script. Use those boundaries exactly as given. Do not create new clips, remove clips, merge clips, or change clip numbering.
 
-For each clip, return:
+For each provided clip boundary, analyze only that time span and return:
 - clip_number
-- start_time_seconds
-- duration_seconds
-- end_time_seconds
 - short_action_summary
 - recreation_prompt
 
 The output will be used in this pipeline:
-1. the first frame of each clip is extracted,
+1. the first frame of each clip is already extracted from the provided start boundary,
 2. that frame is rewritten into a more original version,
 3. a video generation model receives that first frame plus your recreation_prompt to recreate the clip.
 
@@ -42,23 +39,22 @@ For each recreation_prompt:
 For short_action_summary:
 - use 1 short sentence only
 
-Round all times to 2 decimal places.
+Here are the exact clip boundaries you must use:
+
+{boundary_json}
 
 Return ONLY valid JSON in this exact format:
 
-{
+{{
   "total_clips": 0,
   "clips": [
-    {
+    {{
       "clip_number": 1,
-      "start_time_seconds": 0.0,
-      "duration_seconds": 0.0,
-      "end_time_seconds": 0.0,
       "short_action_summary": "",
       "recreation_prompt": ""
-    }
+    }}
   ]
-}"""
+}}"""
 
 CLIP_ANALYSIS_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -72,25 +68,16 @@ CLIP_ANALYSIS_SCHEMA: dict[str, Any] = {
                 "type": "object",
                 "propertyOrdering": [
                     "clip_number",
-                    "start_time_seconds",
-                    "duration_seconds",
-                    "end_time_seconds",
                     "short_action_summary",
                     "recreation_prompt",
                 ],
                 "required": [
                     "clip_number",
-                    "start_time_seconds",
-                    "duration_seconds",
-                    "end_time_seconds",
                     "short_action_summary",
                     "recreation_prompt",
                 ],
                 "properties": {
                     "clip_number": {"type": "integer"},
-                    "start_time_seconds": {"type": "number"},
-                    "duration_seconds": {"type": "number"},
-                    "end_time_seconds": {"type": "number"},
                     "short_action_summary": {"type": "string"},
                     "recreation_prompt": {"type": "string"},
                 },
@@ -126,6 +113,29 @@ def get_mock_response_path(explicit_path: str | None = None) -> Path:
     if not path_value:
         return ROOT_DIR / "samples" / "sample-clip-definition.json"
     return Path(path_value).expanduser().resolve()
+
+
+def build_boundary_context(clips_manifest: dict[str, Any]) -> str:
+    payload = {
+        "total_clips": len(clips_manifest.get("clips", [])),
+        "clips": [],
+    }
+    for clip in clips_manifest.get("clips", []):
+        payload["clips"].append(
+            {
+                "clip_number": int(clip.get("clip_number") or clip["index"]),
+                "start_time_seconds": round(float(clip.get("start_time_seconds", clip["start_time"])), 3),
+                "duration_seconds": round(float(clip["duration_seconds"]), 3),
+                "end_time_seconds": round(float(clip.get("end_time_seconds", clip["end_time"])), 3),
+            }
+        )
+    return json.dumps(payload, indent=2)
+
+
+def build_clip_prompt_from_boundaries(clips_manifest: dict[str, Any]) -> str:
+    return GEMINI_CLIP_ANALYSIS_PROMPT_TEMPLATE.format(
+        boundary_json=build_boundary_context(clips_manifest)
+    )
 
 
 def wait_for_uploaded_file(client: Any, file_name: str, poll_interval_seconds: float = 5.0) -> Any:
@@ -175,15 +185,9 @@ def parse_clip_analysis_json(response_text: str) -> dict[str, Any]:
     normalized_clips: list[dict[str, Any]] = []
     for clip in clips:
         clip_number = int(clip["clip_number"])
-        start_time = round(float(clip["start_time_seconds"]), 2)
-        duration = round(float(clip["duration_seconds"]), 2)
-        end_time = round(float(clip["end_time_seconds"]), 2)
         normalized_clips.append(
             {
                 "clip_number": clip_number,
-                "start_time_seconds": start_time,
-                "duration_seconds": duration,
-                "end_time_seconds": end_time,
                 "short_action_summary": str(clip["short_action_summary"]).strip(),
                 "recreation_prompt": str(clip["recreation_prompt"]).strip(),
             }
@@ -193,6 +197,48 @@ def parse_clip_analysis_json(response_text: str) -> dict[str, Any]:
     return {
         "total_clips": len(normalized_clips),
         "clips": normalized_clips,
+    }
+
+
+def fit_mock_response_to_boundaries(
+    mock_response: dict[str, Any],
+    clips_manifest: dict[str, Any],
+) -> dict[str, Any]:
+    local_clips = clips_manifest.get("clips", [])
+    if not local_clips:
+        return {"total_clips": 0, "clips": []}
+
+    mock_clips = mock_response.get("clips", [])
+    if not mock_clips:
+        raise ValueError("Mock Gemini response does not include any clips.")
+
+    if len(mock_clips) == len(local_clips):
+        return {
+            "total_clips": len(mock_clips),
+            "clips": [
+                {
+                    "clip_number": int(local_clip.get("clip_number") or local_clip["index"]),
+                    "short_action_summary": mock_clip["short_action_summary"],
+                    "recreation_prompt": mock_clip["recreation_prompt"],
+                }
+                for local_clip, mock_clip in zip(local_clips, mock_clips)
+            ],
+        }
+
+    fitted_clips: list[dict[str, Any]] = []
+    for index, local_clip in enumerate(local_clips):
+        template_clip = mock_clips[index % len(mock_clips)]
+        fitted_clips.append(
+            {
+                "clip_number": int(local_clip.get("clip_number") or local_clip["index"]),
+                "short_action_summary": template_clip["short_action_summary"],
+                "recreation_prompt": template_clip["recreation_prompt"],
+            }
+        )
+
+    return {
+        "total_clips": len(fitted_clips),
+        "clips": fitted_clips,
     }
 
 
@@ -215,42 +261,38 @@ def save_gemini_artifacts(
 
 def build_clips_manifest_from_gemini(
     run_id: str,
-    existing_created_at: str | None,
+    existing_manifest: dict[str, Any],
     gemini_json: dict[str, Any],
     *,
     model: str,
 ) -> dict[str, Any]:
-    clips = []
+    clips_by_number = {
+        int(clip.get("clip_number") or clip["index"]): dict(clip)
+        for clip in existing_manifest.get("clips", [])
+    }
     for clip in gemini_json["clips"]:
         clip_number = int(clip["clip_number"])
-        start_time = round(float(clip["start_time_seconds"]), 2)
-        end_time = round(float(clip["end_time_seconds"]), 2)
-        duration = round(float(clip["duration_seconds"]), 2)
-        clip_id = f"clip_{clip_number:04d}"
-        clips.append(
-            {
-                "clip_id": clip_id,
-                "index": clip_number,
-                "clip_number": clip_number,
-                "start_time": start_time,
-                "start_time_seconds": start_time,
-                "duration_seconds": duration,
-                "end_time": end_time,
-                "end_time_seconds": end_time,
-                "short_action_summary": clip["short_action_summary"],
-                "recreation_prompt": clip["recreation_prompt"],
-                "clip_path": None,
-                "analysis_path": None,
-                "first_frame_path": None,
-                "status": "gemini_analyzed",
-            }
-        )
+        if clip_number not in clips_by_number:
+            raise KeyError(f"Gemini returned clip_number {clip_number}, which does not exist in the local clips manifest.")
+        existing_clip = clips_by_number[clip_number]
+        existing_clip["short_action_summary"] = clip["short_action_summary"]
+        existing_clip["recreation_prompt"] = clip["recreation_prompt"]
+        existing_clip["status"] = "gemini_analyzed"
+        clips_by_number[clip_number] = existing_clip
 
-    return {
+    merged_clips = [
+        clips_by_number[key]
+        for key in sorted(clips_by_number.keys())
+    ]
+
+    merged_manifest = {
         "run_id": run_id,
-        "created_at": existing_created_at or timestamp_utc(),
-        "source": "gemini_video_analysis",
+        "created_at": existing_manifest.get("created_at") or timestamp_utc(),
+        "source": existing_manifest.get("source", "gemini_video_analysis"),
         "model": model,
-        "total_clips": len(clips),
-        "clips": clips,
+        "total_clips": len(merged_clips),
+        "clips": merged_clips,
     }
+    if "scene_detection" in existing_manifest:
+        merged_manifest["scene_detection"] = existing_manifest["scene_detection"]
+    return merged_manifest

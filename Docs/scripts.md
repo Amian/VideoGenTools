@@ -8,17 +8,16 @@ The goal is to keep each part of the pipeline isolated into small Python scripts
 
 ## Current Direction
 
-The preferred workflow is now Gemini-first for clip definition.
+The preferred workflow in this branch is script-based boundary detection.
 
-Instead of relying only on local scene detection, the app should:
+The app should:
 
 1. ingest the full source video
-2. send the video to Gemini for semantic clip segmentation
-3. receive strict JSON containing clip timings, summaries, and recreation prompts
-4. extract the first frame of each clip using Gemini's `start_time_seconds`
-5. use those frames and prompts for later recreation steps
+2. detect clip boundaries locally using FFmpeg scene-change analysis
+3. extract the first frame of each detected clip
+4. output a compact JSON file with clip start, end, and duration
 
-In development, Gemini can be mocked so the pipeline does not incur API cost. In that mode, the app loads a saved Gemini JSON response from `samples/sample-clip-definition.json` and proceeds exactly as if Gemini returned it live.
+This branch is focused on clip boundary timing and clip-start images only. It does not rely on Gemini for clip timing.
 
 ## Recommended Approach
 

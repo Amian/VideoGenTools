@@ -1,0 +1,77 @@
+{
+  "total_clips": 9,
+  "clips": [
+    {
+      "clip_number": 1,
+      "start_time_seconds": 0.0,
+      "duration_seconds": 1.25,
+      "end_time_seconds": 1.25,
+      "short_action_summary": "A person opens an ornate wooden cabinet door to reveal vintage teapots.",
+      "recreation_prompt": "A medium shot of an ornate, curved wooden cabinet with intricate marquetry and gold accents. A person's hand enters the frame and pulls the handle of the central door, swinging it open to the left. The interior reveals two shelves lined with various white and floral vintage teapots. The background features a large tapestry and floral vases on top of the cabinet. The camera is static, and the lighting is soft and natural, highlighting the wood grain and porcelain. The motion is smooth as the door opens to reveal the collection."
+    },
+    {
+      "clip_number": 2,
+      "start_time_seconds": 1.25,
+      "duration_seconds": 1.13,
+      "end_time_seconds": 2.38,
+      "short_action_summary": "A hand holds a white teapot with colorful floral designs against a tapestry.",
+      "recreation_prompt": "A close-up shot of a hand holding a white, footed porcelain teapot with vibrant pink, yellow, and blue floral patterns and gold trim. The hand, wearing a white lace sleeve, holds the teapot steady against a background of a classic landscape tapestry. The camera is stationary, focusing on the details of the teapot's curved spout and decorative lid. The lighting is bright and even, creating a clean, elegant aesthetic. The teapot remains mostly still with slight natural hand movement."
+    },
+    {
+      "clip_number": 3,
+      "start_time_seconds": 2.38,
+      "duration_seconds": 1.13,
+      "end_time_seconds": 3.51,
+      "short_action_summary": "A hand holds an ivory-colored teapot with a large pink rose design.",
+      "recreation_prompt": "A close-up shot of a hand holding an ivory-toned porcelain teapot. The teapot features a large, prominent pink rose illustration and a unique, peaked lid. The person's arm is clothed in white lace. The background is a soft-focus tapestry depicting a river scene. The camera is fixed, capturing the teapot's smooth glaze and golden accents. There is minimal movement as the hand presents the teapot to the viewer under soft, warm indoor lighting."
+    },
+    {
+      "clip_number": 4,
+      "start_time_seconds": 3.51,
+      "duration_seconds": 1.13,
+      "end_time_seconds": 4.64,
+      "short_action_summary": "A hand holds a tall, elegant white teapot with delicate floral details.",
+      "recreation_prompt": "A close-up shot of a tall, slender white porcelain teapot held by a hand in a lace sleeve. The teapot is decorated with small bouquets of colorful flowers and intricate gold filigree. It has a high, arched handle and a matching lid. The background remains the scenic tapestry. The camera is steady, highlighting the teapot's elegant silhouette and fine details. The lighting is bright, making the white porcelain pop against the warm background colors. Motion is limited to very subtle hand stabilization."
+    },
+    {
+      "clip_number": 5,
+      "start_time_seconds": 4.64,
+      "duration_seconds": 1.13,
+      "end_time_seconds": 5.77,
+      "short_action_summary": "A hand holds a wide, low-profile teapot with a purple and yellow flower bouquet.",
+      "recreation_prompt": "A close-up shot of a hand holding a wide, squat white teapot with a large floral arrangement of purple and yellow flowers painted on the side. The teapot has a decorative, scalloped edge and gold trim. The lace-clothed hand holds it firmly in front of the tapestry background. The camera is static, focusing on the teapot's texture and artistic painting. The scene is lit with natural, diffuse light, emphasizing the classical and romantic mood. The teapot is held still for the duration of the clip."
+    },
+    {
+      "clip_number": 6,
+      "start_time_seconds": 5.77,
+      "duration_seconds": 1.12,
+      "end_time_seconds": 6.89,
+      "short_action_summary": "A hand turns a teapot to show a pastoral scene painted in a gold frame.",
+      "recreation_prompt": "A close-up shot of a hand holding a white teapot. The camera focuses on a detailed painting of a couple in a pastoral setting, enclosed within an ornate gold-painted frame on the teapot's side. The hand slightly rotates the teapot to showcase the artwork. The background is a landscape tapestry, and the lace sleeve is visible. The lighting is soft and flattering, highlighting the fine brushwork of the miniature painting. The movement is a slow, deliberate tilt to catch the light on the gold accents."
+    },
+    {
+      "clip_number": 7,
+      "start_time_seconds": 6.89,
+      "duration_seconds": 1.13,
+      "end_time_seconds": 8.02,
+      "short_action_summary": "A hand holds a tall, ivory teapot with a floral pattern and long spout.",
+      "recreation_prompt": "A close-up shot of a tall, ivory-colored porcelain teapot with a long, elegant spout and a high handle. It features a colorful floral bouquet on the body and gold trim along the edges. The hand holding it wears a white lace cuff. The background is a muted tapestry scene. The camera is stationary, focusing on the teapot's vertical form and delicate lid. The lighting is warm and steady. There is almost no motion as the teapot is presented against the classical backdrop."
+    },
+    {
+      "clip_number": 8,
+      "start_time_seconds": 8.02,
+      "duration_seconds": 1.13,
+      "end_time_seconds": 9.15,
+      "short_action_summary": "A hand holds a light blue teapot with white embossed lace-like patterns.",
+      "recreation_prompt": "A close-up shot of a unique, light blue or pale grey teapot held by a hand. The teapot is decorated with intricate white embossed patterns that resemble lace or filigree, giving it a textured, three-dimensional look. The hand, in a white lace sleeve, holds the teapot against the familiar tapestry background. The camera is fixed, capturing the contrast between the blue body and the white relief details. The lighting is soft and clear, highlighting the teapot's matte-like finish and delicate structure."
+    },
+    {
+      "clip_number": 9,
+      "start_time_seconds": 9.15,
+      "duration_seconds": 1.5,
+      "end_time_seconds": 10.65,
+      "short_action_summary": "A hand closes the ornate wooden cabinet door.",
+      "recreation_prompt": "A medium shot of the ornate wooden cabinet. The person's hand reaches out and pushes the open central door, swinging it shut to the right. The door clicks into place, revealing the full marquetry design of a flower vase on the front. The camera is static, showing the cabinet, the vases on top, and the tapestry background. The motion is smooth and controlled as the door closes. The lighting remains soft and natural, emphasizing the polished wood and the classical interior setting."
+    }
+  ]
+}

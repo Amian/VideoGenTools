@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import json
 import os
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--url", default="https://chatgpt.com/", help="ChatGPT URL.")
     parser.add_argument("--timeout-ms", type=int, default=180000, help="Image generation timeout in milliseconds.")
     parser.add_argument("--headless", action="store_true", help="Run headless.")
+    parser.add_argument("--debug-dir", help="Optional directory for screenshots and DOM diagnostics.")
     return parser.parse_args()
 
 
@@ -47,6 +49,89 @@ def resolve_output_path(output_arg: str) -> Path:
     ensure_dir(output)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return output / f"generated-{stamp}.png"
+
+
+def sanitize_label(label: str) -> str:
+    safe = "".join(character if character.isalnum() or character in {"-", "_"} else "-" for character in label.lower())
+    while "--" in safe:
+        safe = safe.replace("--", "-")
+    return safe.strip("-") or "step"
+
+
+def make_debug_dir(debug_dir: str | None) -> Path | None:
+    if not debug_dir:
+        return None
+    path = Path(debug_dir).expanduser().resolve()
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def write_debug_artifacts(page, debug_dir: Path | None, label: str) -> None:
+    if debug_dir is None:
+        return
+
+    slug = sanitize_label(label)
+    screenshot_path = debug_dir / f"{slug}.png"
+    json_path = debug_dir / f"{slug}.json"
+
+    try:
+        page.screenshot(path=str(screenshot_path), full_page=True)
+    except Exception as error:
+        screenshot_path.write_text(f"Screenshot failed: {error}\n", encoding="utf-8")
+
+    try:
+        diagnostics = page.evaluate(
+            """
+            () => {
+              const toSummary = (element) => {
+                const rect = element.getBoundingClientRect();
+                const style = window.getComputedStyle(element);
+                return {
+                  tag: element.tagName.toLowerCase(),
+                  id: element.id || null,
+                  className: element.className || null,
+                  role: element.getAttribute('role'),
+                  type: element.getAttribute('type'),
+                  placeholder: element.getAttribute('placeholder'),
+                  ariaLabel: element.getAttribute('aria-label'),
+                  title: element.getAttribute('title'),
+                  text: (element.innerText || element.textContent || '').trim().slice(0, 300),
+                  value: 'value' in element ? (element.value || '').slice(0, 300) : null,
+                  visible:
+                    rect.width > 0 &&
+                    rect.height > 0 &&
+                    style.visibility !== 'hidden' &&
+                    style.display !== 'none',
+                  rect: {
+                    x: Math.round(rect.x),
+                    y: Math.round(rect.y),
+                    width: Math.round(rect.width),
+                    height: Math.round(rect.height),
+                  },
+                  disabled: Boolean(element.disabled),
+                };
+              };
+
+              return {
+                url: location.href,
+                title: document.title,
+                readyState: document.readyState,
+                textareas: Array.from(document.querySelectorAll('textarea')).map(toSummary).slice(0, 20),
+                contenteditables: Array.from(document.querySelectorAll('[contenteditable=\"true\"], [role=\"textbox\"]')).map(toSummary).slice(0, 20),
+                fileInputs: Array.from(document.querySelectorAll('input[type=\"file\"]')).map(toSummary).slice(0, 20),
+                buttons: Array.from(document.querySelectorAll('button')).map(toSummary).slice(0, 60),
+                images: Array.from(document.querySelectorAll('img')).map(toSummary).slice(0, 30),
+                visibleTextSample: Array.from(document.querySelectorAll('h1, h2, h3, p, span, div'))
+                  .map((element) => (element.innerText || '').trim())
+                  .filter(Boolean)
+                  .slice(0, 60),
+              };
+            }
+            """
+        )
+        json_path.write_text(json.dumps(diagnostics, indent=2), encoding="utf-8")
+    except Exception as error:
+        json_path.write_text(json.dumps({"error": str(error)}, indent=2), encoding="utf-8")
 
 
 def find_composer(page, timeout_ms: int = 30000):
@@ -194,7 +279,7 @@ def wait_for_new_image(page, previous_src: str | None, timeout_ms: int) -> dict:
     while elapsed < timeout_ms:
         state = get_latest_image_state(page)
         has_new_image = bool(state["src"]) and state["src"] != previous_src
-        is_large_enough = state["width"] >= 1024 and state["height"] >= 1024
+        is_large_enough = state["width"] >= 512 and state["height"] >= 512
 
         if state["src"] and state["src"] == stable_src:
             stable_count += 1
@@ -310,32 +395,64 @@ def download_generated_image(page, output_path: Path) -> None:
         raise RuntimeError("Failed to download generated image.")
 
 
-def main() -> None:
-    args = parse_args()
-    profile_path = Path(args.profile).expanduser().resolve() if args.profile else default_profile_path()
-    output_path = resolve_output_path(args.output)
-    image_paths = resolve_image_paths(args.image)
+def generate_image(
+    *,
+    prompt: str,
+    output: str,
+    images: list[str] | None = None,
+    profile: str | None = None,
+    url: str = "https://chatgpt.com/",
+    timeout_ms: int = 180000,
+    headless: bool = False,
+    debug_dir: str | None = None,
+) -> Path:
+    profile_path = Path(profile).expanduser().resolve() if profile else default_profile_path()
+    output_path = resolve_output_path(output)
+    image_paths = resolve_image_paths(images or [])
+    debug_path = make_debug_dir(debug_dir)
     ensure_dir(profile_path)
 
     with Camoufox(
-        headless=args.headless,
+        headless=headless,
         persistent_context=True,
         user_data_dir=str(profile_path),
     ) as browser:
         page = browser.pages[0] if browser.pages else browser.new_page()
         page.set_viewport_size({"width": 1440, "height": 1100})
-        page.goto(args.url, wait_until="domcontentloaded", timeout=60000)
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
         page.wait_for_timeout(4000)
+        write_debug_artifacts(page, debug_path, "01-after-load")
 
         previous_image = get_latest_image_state(page)
         upload_images(page, image_paths)
-        enter_prompt(page, args.prompt)
+        write_debug_artifacts(page, debug_path, "02-after-upload")
+        enter_prompt(page, prompt)
+        write_debug_artifacts(page, debug_path, "03-after-prompt")
         click_send(page)
-        wait_for_new_image(page, previous_image.get("src"), args.timeout_ms)
+        write_debug_artifacts(page, debug_path, "04-after-send")
+        wait_for_new_image(page, previous_image.get("src"), timeout_ms)
+        write_debug_artifacts(page, debug_path, "05-image-ready")
         download_generated_image(page, output_path)
+        write_debug_artifacts(page, debug_path, "06-after-download")
 
-        print(f"Saved image: {output_path}")
-        print(f"Profile used: {profile_path}")
+    return output_path
+
+
+def main() -> None:
+    args = parse_args()
+    output_path = generate_image(
+        prompt=args.prompt,
+        output=args.output,
+        images=args.image,
+        profile=args.profile,
+        url=args.url,
+        timeout_ms=args.timeout_ms,
+        headless=args.headless,
+        debug_dir=args.debug_dir,
+    )
+    profile_path = Path(args.profile).expanduser().resolve() if args.profile else default_profile_path()
+    print(f"Saved image: {output_path}")
+    print(f"Profile used: {profile_path}")
 
 
 if __name__ == "__main__":
